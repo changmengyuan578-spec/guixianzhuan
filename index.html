@@ -826,12 +826,12 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
         backstage: "后台旧道具间",
       };
       const explorationDoorPositions = {
-        stage: { step: 0, lane: 1 },
-        leather: { step: 1, lane: 2 },
-        carving: { step: 2, lane: 0 },
-        painting: { step: 3, lane: 2 },
-        performance: { step: 4, lane: 0 },
-        backstage: { step: 5, lane: 1 },
+        stage: { scene: "lower-hall", step: 0, lane: 1 },
+        leather: { scene: "lower-hall", step: 2, lane: 2 },
+        carving: { scene: "lower-hall", step: 4, lane: 0 },
+        painting: { scene: "upper-hall", step: 1, lane: 2 },
+        performance: { scene: "upper-hall", step: 3, lane: 0 },
+        backstage: { scene: "upper-hall", step: 5, lane: 1 },
       };
 
       /* ================================================================
@@ -1572,43 +1572,76 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
         const [stageDepth, setStageDepth] = useState(0);
         const [corridorStep, setCorridorStep] = useState(storedCorridorStep);
         const [lane, setLane] = useState(storedLane);
-        const [hint, setHint] = useState("");
         const [sidebarPanel, setSidebarPanel] = useState(null);
         const [selectedHintDoorId, setSelectedHintDoorId] = useState("stage");
 
         const lanePercents = [24, 50, 76];
-        const laneLabels = ["左侧", "中间", "右侧"];
-        const corridorDoors = useMemo(() => ([
-          { roomId: "stage", step: 0, lane: 1, label: explorationRoomLabels.stage, shortLabel: "旧居门", icon: IconHome },
-          { roomId: "leather", step: 1, lane: 2, label: explorationRoomLabels.leather, shortLabel: "右侧木门", icon: IconDesk },
-          { roomId: "carving", step: 2, lane: 0, label: explorationRoomLabels.carving, shortLabel: "左侧木门", icon: IconSwords },
-          { roomId: "painting", step: 3, lane: 2, label: explorationRoomLabels.painting, shortLabel: "右侧彩门", icon: IconPalette },
-          { roomId: "performance", step: 4, lane: 0, label: explorationRoomLabels.performance, shortLabel: "左侧乐门", icon: IconMusic },
-          { roomId: "backstage", step: 5, lane: 1, label: explorationRoomLabels.backstage, shortLabel: "尽头旧门", icon: IconBookOpen },
+        const laneText = ["左边墙下", "过道正中", "右边墙下"];
+        const currentSceneId = explorationSceneId === "upper-hall" ? "upper-hall" : explorationSceneId === "stage-entry" ? "stage-entry" : "lower-hall";
+
+        const portals = useMemo(() => ([
+          { type: "room", roomId: "stage", scene: "lower-hall", step: 0, lane: 1, label: explorationRoomLabels.stage, icon: IconHome },
+          { type: "room", roomId: "leather", scene: "lower-hall", step: 2, lane: 2, label: explorationRoomLabels.leather, icon: IconDesk },
+          { type: "room", roomId: "carving", scene: "lower-hall", step: 4, lane: 0, label: explorationRoomLabels.carving, icon: IconSwords },
+          { type: "stairs", id: "stairs-up", scene: "lower-hall", step: 3, lane: 1, label: "木楼梯", shortLabel: "楼梯", toScene: "upper-hall", toStep: 0, toLane: 1, icon: IconChevronRight },
+          { type: "stairs", id: "stairs-down", scene: "upper-hall", step: 0, lane: 1, label: "下楼的木梯", shortLabel: "楼梯", toScene: "lower-hall", toStep: 3, toLane: 1, icon: IconChevronRight },
+          { type: "room", roomId: "painting", scene: "upper-hall", step: 1, lane: 2, label: explorationRoomLabels.painting, icon: IconPalette },
+          { type: "room", roomId: "performance", scene: "upper-hall", step: 3, lane: 0, label: explorationRoomLabels.performance, icon: IconMusic },
+          { type: "room", roomId: "backstage", scene: "upper-hall", step: 5, lane: 1, label: explorationRoomLabels.backstage, icon: IconBookOpen },
         ]), []);
 
         useEffect(() => {
-          setHint("");
-          if (explorationSceneId === "stage-entry") {
+          if (currentSceneId === "stage-entry") {
             setStageDepth(0);
           } else {
             setCorridorStep(storedCorridorStep);
             setLane(storedLane);
           }
-        }, [explorationSceneId, storedCorridorStep, storedLane]);
+        }, [currentSceneId, storedCorridorStep, storedLane]);
+
+        const roomPortalMap = useMemo(() => {
+          const map = {};
+          portals.forEach((portal) => {
+            if (portal.type === "room") {
+              map[portal.roomId] = { scene: portal.scene, step: portal.step, lane: portal.lane };
+            }
+          });
+          return map;
+        }, [portals]);
+
+        const scenePortals = portals.filter((portal) => portal.scene === currentSceneId);
+        const exactPortal = scenePortals.find((portal) => portal.step === corridorStep && portal.lane === lane);
+        const sidePortal = scenePortals.find((portal) => portal.step === corridorStep && Math.abs(portal.lane - lane) === 1);
+        const forwardPortal = scenePortals.find((portal) => portal.step === corridorStep + 1 && portal.lane === lane);
+        const forwardSidePortal = scenePortals.find((portal) => portal.step === corridorStep + 1 && Math.abs(portal.lane - lane) === 1);
+        const visiblePortals = scenePortals.filter((portal) => {
+          if (portal.step === corridorStep && Math.abs(portal.lane - lane) <= 1) return true;
+          if (portal.step === corridorStep + 1 && portal.lane === lane) return true;
+          return false;
+        });
+        const hintDoorOptions = portals.filter((portal) => portal.type === "room" && unlockedRoomIds.includes(portal.roomId));
+        const selectedHintPortal = portals.find((portal) => portal.type === "room" && portal.roomId === selectedHintDoorId) || portals.find((portal) => portal.roomId === "stage");
 
         useEffect(() => {
-          if (!corridorDoors.some((door) => door.roomId === selectedHintDoorId)) {
+          if (!hintDoorOptions.some((portal) => portal.roomId === selectedHintDoorId)) {
             setSelectedHintDoorId("stage");
           }
-        }, [corridorDoors, selectedHintDoorId]);
+        }, [hintDoorOptions, selectedHintDoorId]);
+
+        const persistCorridorPosition = (scene, step, nextLane) => {
+          store.setState({
+            explorationSceneId: scene,
+            explorationCorridorStep: step,
+            explorationLane: nextLane,
+          });
+        };
 
         const enterRoom = (roomId) => {
-          const doorPosition = explorationDoorPositions[roomId] || { step: 0, lane: 1 };
+          const doorPosition = roomPortalMap[roomId] || { scene: "lower-hall", step: 0, lane: 1 };
           store.setState((state) => ({
             currentRoomId: roomId,
             roomViewMode: "room",
-            explorationSceneId: "corridor",
+            explorationSceneId: doorPosition.scene,
             explorationCorridorStep: doorPosition.step,
             explorationLane: doorPosition.lane,
             activeDialogue: null,
@@ -1617,113 +1650,90 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
           }));
         };
 
-        const visibleDoors = corridorDoors.filter((door) => door.step === corridorStep && Math.abs(door.lane - lane) <= 1);
-        const doorHere = corridorDoors.find((door) => door.step === corridorStep && door.lane === lane);
-        const sideDoorHere = corridorDoors.find((door) => door.step === corridorStep && door.lane !== lane);
-        const doorAhead = corridorDoors.find((door) => door.step === corridorStep + 1 && door.lane === lane);
-        const nearbySideDoor = corridorDoors.find((door) => door.step === corridorStep + 1 && Math.abs(door.lane - lane) === 1);
-        const hintDoorOptions = corridorDoors.filter((door) => unlockedRoomIds.includes(door.roomId));
-        const selectedHintDoor = corridorDoors.find((door) => door.roomId === selectedHintDoorId) || corridorDoors[0];
-
-        const interactDoor = (door) => {
-          if (!door) {
-            setHint(explorationSceneId === "stage-entry" ? "门就在前面，再往前走两步。" : "这边只有黑过道，继续摸索。");
+        const interactPortal = (portal) => {
+          if (!portal) return;
+          if (portal.type === "stairs") {
+            persistCorridorPosition(portal.toScene, portal.toStep, portal.toLane);
+            setCorridorStep(portal.toStep);
+            setLane(portal.toLane);
             return;
           }
-          if (!unlockedRoomIds.includes(door.roomId)) {
-            setHint(door.roomId === "backstage" ? "旧道具间还没开，得先把四门学艺都补全。" : "这扇门还推不开，先把旧居里的戏本线索接起来。");
-            return;
-          }
-          enterRoom(door.roomId);
+          if (!unlockedRoomIds.includes(portal.roomId)) return;
+          enterRoom(portal.roomId);
         };
 
         const moveLeft = () => {
-          if (explorationSceneId === "stage-entry") {
-            setHint("门就在正前方，不用往旁边摸。");
-            return;
-          }
-          setHint("");
+          if (currentSceneId === "stage-entry") return;
           setLane((value) => {
             const next = Math.max(0, value - 1);
-            store.setState({ explorationLane: next });
+            persistCorridorPosition(currentSceneId, corridorStep, next);
             return next;
           });
         };
 
         const moveRight = () => {
-          if (explorationSceneId === "stage-entry") {
-            setHint("门就在正前方，不用往旁边摸。");
-            return;
-          }
-          setHint("");
+          if (currentSceneId === "stage-entry") return;
           setLane((value) => {
             const next = Math.min(2, value + 1);
-            store.setState({ explorationLane: next });
+            persistCorridorPosition(currentSceneId, corridorStep, next);
             return next;
           });
         };
 
         const moveForward = () => {
-          setHint("");
-          if (explorationSceneId === "stage-entry") {
-            if (stageDepth < 2) {
-              setStageDepth((value) => Math.min(2, value + 1));
+          if (currentSceneId === "stage-entry") {
+            if (stageDepth < 3) {
+              setStageDepth((value) => Math.min(3, value + 1));
               return;
             }
-            store.setState({ explorationSceneId: "corridor", explorationCorridorStep: 0, explorationLane: 1 });
+            persistCorridorPosition("lower-hall", 0, 1);
             return;
           }
-          const maxStep = corridorDoors[corridorDoors.length - 1].step;
-          if (doorHere) {
-            interactDoor(doorHere);
+          const sceneMaxStep = Math.max(...scenePortals.map((portal) => portal.step));
+          if (exactPortal) {
+            interactPortal(exactPortal);
             return;
           }
-          if (corridorStep < maxStep) {
-            setCorridorStep((value) => {
-              const next = Math.min(maxStep, value + 1);
-              store.setState({ explorationCorridorStep: next });
-              return next;
-            });
-          } else {
-            setHint("过道尽头只剩一片黑墙，得回身看看别的门。");
+          if (corridorStep < sceneMaxStep) {
+            const next = corridorStep + 1;
+            setCorridorStep(next);
+            persistCorridorPosition(currentSceneId, next, lane);
           }
         };
 
         const moveBack = () => {
-          setHint("");
-          if (explorationSceneId === "stage-entry") {
+          if (currentSceneId === "stage-entry") {
             setStageDepth((value) => Math.max(0, value - 1));
             return;
           }
-          if (corridorStep === 0) {
+          if (currentSceneId === "lower-hall" && corridorStep === 0) {
             store.setState({ explorationSceneId: "stage-entry" });
             return;
           }
-          setCorridorStep((value) => {
-            const next = Math.max(0, value - 1);
-            store.setState({ explorationCorridorStep: next });
-            return next;
-          });
+          if (corridorStep > 0) {
+            const next = corridorStep - 1;
+            setCorridorStep(next);
+            persistCorridorPosition(currentSceneId, next, lane);
+          }
         };
 
         const confirmMove = () => {
-          if (explorationSceneId === "stage-entry") {
+          if (currentSceneId === "stage-entry") {
             moveForward();
             return;
           }
-          if (doorHere) {
-            interactDoor(doorHere);
+          if (exactPortal) {
+            interactPortal(exactPortal);
             return;
           }
-          if (sideDoorHere) {
-            setHint(`${sideDoorHere.shortLabel}在${sideDoorHere.lane === 0 ? "左边" : "右边"}，先挪过去。`);
+          if (forwardPortal) {
+            moveForward();
             return;
           }
-          if (doorAhead) {
-            setHint("前面隐约有门影，再往前走一段。");
-            return;
+          if (sidePortal) {
+            if (sidePortal.lane < lane) moveLeft();
+            if (sidePortal.lane > lane) moveRight();
           }
-          setHint("先在黑里摸索一下，也许前面就有门。");
         };
 
         useEffect(() => {
@@ -1731,121 +1741,114 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
             const key = event.key;
             if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "a", "A", "d", "D", "w", "W", "s", "S", "Enter", " "].includes(key)) return;
             event.preventDefault();
-            if (key === "ArrowLeft" || key === "a" || key === "A") {
-              moveLeft();
-              return;
-            }
-            if (key === "ArrowRight" || key === "d" || key === "D") {
-              moveRight();
-              return;
-            }
-            if (key === "ArrowDown" || key === "s" || key === "S") {
-              moveBack();
-              return;
-            }
-            if (key === "ArrowUp" || key === "w" || key === "W") {
-              moveForward();
-              return;
-            }
-            if (key === "Enter" || key === " ") {
-              confirmMove();
-            }
+            if (key === "ArrowLeft" || key === "a" || key === "A") return moveLeft();
+            if (key === "ArrowRight" || key === "d" || key === "D") return moveRight();
+            if (key === "ArrowUp" || key === "w" || key === "W") return moveForward();
+            if (key === "ArrowDown" || key === "s" || key === "S") return moveBack();
+            if (key === "Enter" || key === " ") return confirmMove();
           };
           window.addEventListener("keydown", handleKeyDown);
           return () => window.removeEventListener("keydown", handleKeyDown);
-        }, [explorationSceneId, stageDepth, corridorStep, lane, doorHere, sideDoorHere, doorAhead]);
-
-        const sceneTitle = explorationSceneId === "stage-entry" ? "戏楼正门" : "旧戏楼黑过道";
-        const stagePrompt = stageDepth === 0
-          ? "面前只有一扇大门。按前进，慢慢靠过去。"
-          : stageDepth === 1
-          ? "你已经走近门前，还能听见里面木板轻响。再往前一步，就能推门。"
-          : "手已经碰到门环。再按一次前进，就会把大门推开。";
-        const corridorPrompt = doorHere
-          ? `${doorHere.label}就在眼前，按前进或进入就能推门进去。`
-          : sideDoorHere
-          ? `${sideDoorHere.shortLabel}只在${sideDoorHere.lane === 0 ? "左边" : "右边"}露出一点轮廓，先横着摸过去。`
-          : doorAhead
-          ? "前面的黑里像有木门的轮廓，再往前试试。"
-          : nearbySideDoor
-          ? "旁边好像藏着什么，可能是一扇门。"
-          : "过道里很黑，继续往前摸索，也许下一段就会有门。";
-        const scenePrompt = explorationSceneId === "stage-entry" ? stagePrompt : corridorPrompt;
-        const statusLine = explorationSceneId === "stage-entry"
-          ? `距离大门：${["远处", "靠近中", "门前"][stageDepth]}`
-          : `所在位置：第 ${corridorStep + 1} 段过道 · ${laneLabels[lane]}`;
+        }, [currentSceneId, corridorStep, lane, exactPortal, forwardPortal, sidePortal]);
 
         const hintText = useMemo(() => {
-          if (!selectedHintDoor) return "先选一扇门，再看提示。";
-          if (explorationSceneId === "stage-entry") {
-            return selectedHintDoor.roomId === "stage"
-              ? "先按前进推开戏楼大门，进过道后中间第一扇就是旧居门。"
-              : `先按前进推开戏楼大门，进入黑过道后再去找${selectedHintDoor.label}。`;
+          if (!selectedHintPortal) return "先选一扇门，再看提示。";
+          if (currentSceneId === "stage-entry") {
+            return "先穿过正门，进戏楼后再沿着过道慢慢摸。";
           }
           const directions = [];
-          const stepGap = selectedHintDoor.step - corridorStep;
-          const laneGap = selectedHintDoor.lane - lane;
-          if (stepGap > 0) directions.push(`往前走 ${stepGap} 段`);
-          if (stepGap < 0) directions.push(`往后退 ${Math.abs(stepGap)} 段`);
-          if (laneGap > 0) directions.push(`再往右挪 ${laneGap} 次`);
-          if (laneGap < 0) directions.push(`再往左挪 ${Math.abs(laneGap)} 次`);
-          if (!directions.length) {
-            return `${selectedHintDoor.label}就在你面前，按前进或进入即可。`;
+          if (selectedHintPortal.scene !== currentSceneId) {
+            directions.push(selectedHintPortal.scene === "upper-hall" ? "先找到楼梯上楼" : "先找到楼梯下楼");
           }
-          return `${selectedHintDoor.label}还没到，先${directions.join("，然后")}。`;
-        }, [selectedHintDoor, explorationSceneId, corridorStep, lane]);
+          if (selectedHintPortal.scene === currentSceneId) {
+            const stepGap = selectedHintPortal.step - corridorStep;
+            const laneGap = selectedHintPortal.lane - lane;
+            if (stepGap > 0) directions.push(`往前走 ${stepGap} 段`);
+            if (stepGap < 0) directions.push(`往后退 ${Math.abs(stepGap)} 段`);
+            if (laneGap > 0) directions.push(`再往右挪 ${laneGap} 次`);
+            if (laneGap < 0) directions.push(`再往左挪 ${Math.abs(laneGap)} 次`);
+          }
+          if (!directions.length) return `${selectedHintPortal.label}就在附近，再仔细找找。`;
+          return `${selectedHintPortal.label}：${directions.join("，然后")}。`;
+        }, [selectedHintPortal, currentSceneId, corridorStep, lane]);
 
-        const renderCorridorDoor = (door) => {
-          const relative = door.step - corridorStep;
-          const isNear = relative === 0 && door.lane === lane;
-          const isSidePeek = relative === 0 && Math.abs(door.lane - lane) === 1;
-          const locked = !unlockedRoomIds.includes(door.roomId);
-          const Icon = door.icon || IconHome;
-          const sizeClass = isNear ? "h-[250px] w-[176px]" : "h-[180px] w-[124px]";
-          const top = isNear ? "58%" : "45%";
-          const left = `${lanePercents[door.lane]}%`;
-          const opacity = isNear ? 0.98 : isSidePeek ? 0.48 : 0.22;
+        const renderPortal = (portal) => {
+          const isExact = portal.step === corridorStep && portal.lane === lane;
+          const isSide = portal.step === corridorStep && Math.abs(portal.lane - lane) === 1;
+          const isForward = portal.step === corridorStep + 1 && portal.lane === lane;
+          const left = `${lanePercents[portal.lane]}%`;
+          const top = isExact ? "60%" : isSide ? "56%" : "35%";
+          const opacity = isExact ? 0.98 : isSide ? 0.32 : 0.18;
+          const scale = isExact ? 1 : isSide ? 0.62 : 0.44;
+          if (portal.type === "stairs") {
+            return (
+              <button
+                key={portal.id}
+                type="button"
+                onClick={() => {
+                  if (isExact) interactPortal(portal);
+                }}
+                className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500"
+                style={{ left, top, opacity, transform: `translate(-50%, -50%) scale(${scale})` }}
+              >
+                <div className="relative h-[240px] w-[290px] overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,15,14,0.78),rgba(4,4,4,0.98))] shadow-[0_0_36px_rgba(0,0,0,0.5)]">
+                  <div className="absolute inset-x-[16%] bottom-[18%] h-[12%] bg-[linear-gradient(180deg,rgba(88,63,42,0.55),rgba(27,18,15,0.95))]" />
+                  <div className="absolute inset-x-[22%] bottom-[30%] h-[10%] bg-[linear-gradient(180deg,rgba(92,68,46,0.52),rgba(27,18,15,0.94))]" />
+                  <div className="absolute inset-x-[28%] bottom-[40%] h-[9%] bg-[linear-gradient(180deg,rgba(95,72,48,0.48),rgba(27,18,15,0.92))]" />
+                  <div className="absolute inset-x-[34%] bottom-[49%] h-[8%] bg-[linear-gradient(180deg,rgba(100,76,50,0.44),rgba(27,18,15,0.90))]" />
+                  <div className="absolute inset-x-[40%] bottom-[57%] h-[7%] bg-[linear-gradient(180deg,rgba(110,82,54,0.40),rgba(27,18,15,0.88))]" />
+                  <div className="absolute left-[22%] right-[22%] bottom-[13%] h-px bg-amber-100/12" />
+                  <div className="absolute inset-x-0 bottom-[8%] text-center text-xs text-stone-300">{portal.label}</div>
+                </div>
+              </button>
+            );
+          }
+          const Icon = portal.icon || IconHome;
+          const locked = !unlockedRoomIds.includes(portal.roomId);
           return (
             <button
-              key={door.roomId}
+              key={portal.roomId}
               type="button"
               onClick={() => {
-                setLane(door.lane);
-                if (isNear && door.lane === lane) {
-                  interactDoor(door);
-                } else if (!isNear) {
-                  setHint("门影在前面，先往前走近一点。");
-                }
+                if (isExact) interactPortal(portal);
               }}
               className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500"
-              style={{ left, top, opacity, transform: `translate(-50%, -50%) scale(${isNear ? 1 : isSidePeek ? 0.72 : 0.62})` }}
+              style={{ left, top, opacity, transform: `translate(-50%, -50%) scale(${scale})` }}
             >
-              <div className={`relative overflow-hidden rounded-[26px] border ${sizeClass} ${isNear ? "border-amber-200/30 bg-[linear-gradient(180deg,rgba(54,34,24,0.95),rgba(7,6,6,0.98))] shadow-[0_0_54px_rgba(0,0,0,0.66)]" : "border-white/12 bg-[linear-gradient(180deg,rgba(28,20,18,0.84),rgba(4,4,4,0.98))]"}`}>
-                <div className="absolute left-[10%] top-[11%] bottom-[10%] w-[8%] rounded-l-[10px] bg-[linear-gradient(180deg,rgba(52,31,22,0.92),rgba(14,10,10,0.98))]" />
-                <div className="absolute right-[10%] top-[11%] bottom-[10%] w-[8%] rounded-r-[10px] bg-[linear-gradient(180deg,rgba(52,31,22,0.92),rgba(14,10,10,0.98))]" />
-                <div className="absolute inset-x-[8%] top-[5%] h-[9%] rounded-t-[14px] bg-[linear-gradient(180deg,rgba(138,92,58,0.66),rgba(70,42,25,0.82))]" />
-                <div className="absolute inset-x-[10%] bottom-[8%] h-[6%] rounded-b-[10px] bg-[linear-gradient(180deg,rgba(34,22,18,0.86),rgba(10,8,8,0.98))]" />
-                <div className="absolute inset-x-[18%] top-[9%] h-[10%] rounded-[8px] border border-amber-100/10 bg-[linear-gradient(180deg,rgba(92,56,34,0.68),rgba(32,21,17,0.94))]" />
-                <div className="absolute inset-x-[12%] top-[14%] h-[68%] rounded-[18px] border border-amber-100/10 bg-[linear-gradient(180deg,rgba(72,42,26,0.94),rgba(18,12,10,0.98))]" />
-                <div className="absolute inset-x-[18%] top-[20%] h-[54%] rounded-[14px] border border-black/25 bg-[linear-gradient(180deg,rgba(104,63,40,0.8),rgba(33,18,15,0.96))]" />
-                <div className="absolute left-[28%] top-[24%] bottom-[28%] w-px bg-amber-100/10" />
-                <div className="absolute right-[28%] top-[24%] bottom-[28%] w-px bg-amber-100/10" />
-                <div className="absolute left-[58%] top-[47%] h-[12px] w-[12px] rounded-full border border-black/20 bg-[radial-gradient(circle_at_40%_40%,rgba(25,18,15,0.2),rgba(6,5,5,0.95))]" />
-                <div className="absolute inset-x-[22%] top-[15%] h-[4%] rounded-full bg-amber-100/7 blur-sm" />
+              <div className={`relative overflow-hidden rounded-[28px] border ${isExact ? "h-[260px] w-[188px]" : isSide ? "h-[180px] w-[132px]" : "h-[120px] w-[96px]"} ${isExact ? "border-amber-100/24 bg-[linear-gradient(180deg,rgba(46,28,20,0.95),rgba(8,8,8,0.98))]" : "border-white/8 bg-[linear-gradient(180deg,rgba(22,18,18,0.82),rgba(4,4,4,0.98))]"}`}>
+                <div className="absolute inset-x-[8%] top-[6%] h-[10%] rounded-t-[14px] bg-[linear-gradient(180deg,rgba(116,78,47,0.55),rgba(64,40,24,0.80))]" />
+                <div className="absolute left-[11%] top-[14%] bottom-[9%] w-[8%] rounded-l-[10px] bg-[linear-gradient(180deg,rgba(48,30,22,0.94),rgba(12,10,10,0.98))]" />
+                <div className="absolute right-[11%] top-[14%] bottom-[9%] w-[8%] rounded-r-[10px] bg-[linear-gradient(180deg,rgba(48,30,22,0.94),rgba(12,10,10,0.98))]" />
+                <div className="absolute inset-x-[18%] top-[20%] h-[56%] rounded-[16px] border border-black/25 bg-[linear-gradient(180deg,rgba(90,56,37,0.74),rgba(26,17,15,0.96))]" />
+                <div className="absolute left-[58%] top-[47%] h-[12px] w-[12px] rounded-full border border-black/20 bg-[radial-gradient(circle_at_40%_40%,rgba(25,18,15,0.15),rgba(6,5,5,0.95))]" />
                 {locked && <div className="absolute inset-0 bg-black/45" />}
-                <div className="absolute inset-x-0 bottom-[10%] flex flex-col items-center gap-1 px-2">
-                  <Icon className={`h-4 w-4 ${locked ? "text-stone-500" : isNear ? "text-amber-100/90" : "text-stone-400"}`} />
-                  <p className={`text-center ${isNear ? "text-[11px]" : "text-[10px]"} ${locked ? "text-stone-500" : isNear ? "text-amber-100/85" : "text-stone-400"}`}>
-                    {isNear ? door.label : isSidePeek ? "半掩的门" : "暗门"}
-                  </p>
+                <div className="absolute inset-x-0 bottom-[8%] flex flex-col items-center gap-1 px-2 text-[10px] text-stone-300">
+                  <Icon className={`h-4 w-4 ${isExact ? "text-amber-100/90" : "text-stone-400"}`} />
+                  <span>{isExact ? portal.label : "门影"}</span>
                 </div>
               </div>
             </button>
           );
         };
 
+        const renderHallShell = () => {
+          const isUpper = currentSceneId === "upper-hall";
+          return (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_60%,rgba(0,0,0,0.08),rgba(0,0,0,0.84)_72%,rgba(0,0,0,0.96)_100%)]" />
+              <div className={`absolute inset-x-[8%] top-[0%] h-[18%] rounded-b-[70px] ${isUpper ? "bg-[linear-gradient(180deg,rgba(36,26,20,0.54),rgba(0,0,0,0.04))]" : "bg-[linear-gradient(180deg,rgba(20,14,12,0.60),rgba(0,0,0,0.04))]"}`} />
+              <div className={`absolute left-[7%] top-[10%] h-[68%] w-[27%] skew-y-[7deg] ${isUpper ? "bg-[linear-gradient(180deg,rgba(26,20,18,0.94),rgba(5,5,5,1))]" : "bg-[linear-gradient(180deg,rgba(18,15,15,0.95),rgba(4,4,4,1))]"}`} />
+              <div className={`absolute right-[7%] top-[10%] h-[68%] w-[27%] -skew-y-[7deg] ${isUpper ? "bg-[linear-gradient(180deg,rgba(26,20,18,0.94),rgba(5,5,5,1))]" : "bg-[linear-gradient(180deg,rgba(18,15,15,0.95),rgba(4,4,4,1))]"}`} />
+              <div className="absolute left-1/2 top-[13%] h-[60%] w-[22%] -translate-x-1/2 rounded-[24px] bg-[linear-gradient(180deg,rgba(16,14,14,0.92),rgba(2,2,2,1))]" />
+              <div className="absolute left-[12%] right-[12%] bottom-[8%] h-[42%] [clip-path:polygon(18%_0,82%_0,100%_100%,0_100%)] bg-[linear-gradient(180deg,rgba(72,45,26,0.06),rgba(4,4,4,0.98))]" />
+              <div className="absolute left-1/2 bottom-[9%] h-[34%] w-px -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,220,170,0.12),transparent)]" />
+              {isUpper && <div className="absolute inset-x-[24%] top-[18%] h-[6%] rounded-full bg-amber-100/6 blur-2xl" />}
+            </>
+          );
+        };
+
         return (
-          <div className="min-h-screen bg-[radial-gradient(ellipse_at_50%_8%,rgba(120,64,24,0.06),transparent_26%),linear-gradient(180deg,#070505_0%,#020202_100%)]">
+          <div className="min-h-screen bg-[radial-gradient(ellipse_at_50%_8%,rgba(120,64,24,0.04),transparent_26%),linear-gradient(180deg,#050404_0%,#010101_100%)]">
             <div className="min-h-screen px-4 py-4 pr-20 md:px-6 md:py-6 md:pr-24">
               <div className="fixed right-0 top-1/2 z-40 -translate-y-1/2">
                 <div className="flex items-center">
@@ -1853,7 +1856,7 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
                     className="overflow-hidden whitespace-nowrap"
                     style={{ width: sidebarPanel ? 260 : 0, opacity: sidebarPanel ? 1 : 0, transition: "width 0.3s ease, opacity 0.3s ease" }}
                   >
-                    <div className="rounded-l-2xl border border-amber-200/20 border-r-0 bg-black/75 p-4 backdrop-blur-sm">
+                    <div className="rounded-l-2xl border border-amber-200/20 border-r-0 bg-black/80 p-4 backdrop-blur-sm">
                       {sidebarPanel === "trails" ? (
                         <>
                           <p className="text-xs uppercase tracking-[0.35em] text-amber-300/65">戏楼足迹</p>
@@ -1875,35 +1878,34 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
                       ) : (
                         <>
                           <p className="text-xs uppercase tracking-[0.35em] text-amber-300/65">寻路提示</p>
-                          <p className="mt-2 text-xs leading-6 text-stone-400">实在找不到时，再从这里选一扇门。它只告诉你方向，不会直接带你过去。</p>
                           <div className="mt-3 grid gap-2">
-                            {hintDoorOptions.map((door) => (
+                            {hintDoorOptions.map((portal) => (
                               <button
-                                key={door.roomId}
+                                key={portal.roomId}
                                 type="button"
-                                onClick={() => setSelectedHintDoorId(door.roomId)}
-                                className={`rounded-xl border px-3 py-2 text-left text-sm transition ${selectedHintDoorId === door.roomId ? "border-amber-200/30 bg-amber-300/10 text-amber-100" : "border-white/6 bg-white/[0.03] text-stone-200 hover:border-amber-200/18 hover:bg-white/[0.05]"}`}
+                                onClick={() => setSelectedHintDoorId(portal.roomId)}
+                                className={`rounded-xl border px-3 py-2 text-left text-sm transition ${selectedHintDoorId === portal.roomId ? "border-amber-200/30 bg-amber-300/10 text-amber-100" : "border-white/6 bg-white/[0.03] text-stone-200 hover:border-amber-200/18 hover:bg-white/[0.05]"}`}
                               >
-                                {door.label}
+                                {portal.label}
                               </button>
                             ))}
                           </div>
                           <div className="mt-4 rounded-xl border border-amber-200/12 bg-black/35 px-3 py-3">
                             <p className="text-[11px] uppercase tracking-[0.3em] text-amber-300/55">当前指引</p>
-                            <p className="mt-2 text-sm leading-6 text-stone-300">{hintText}</p>
+                            <p className="mt-2 whitespace-normal text-sm leading-6 text-stone-300">{hintText}</p>
                           </div>
                         </>
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-col rounded-l-2xl border border-amber-200/20 bg-black/75 backdrop-blur-sm">
+                  <div className="flex flex-col rounded-l-2xl border border-amber-200/20 bg-black/80 backdrop-blur-sm">
                     <Link to="/clues" className="flex h-14 w-14 items-center justify-center border-b border-amber-200/10 text-amber-300 transition hover:bg-white/5 hover:text-amber-200">
                       <IconEye className="h-6 w-6" />
                     </Link>
-                    <button type="button" onMouseEnter={() => setSidebarPanel("trails")} onMouseLeave={() => setSidebarPanel(null)} onClick={() => setSidebarPanel((value) => value === "trails" ? null : "trails")} className="flex h-14 w-14 items-center justify-center border-b border-amber-200/10 text-amber-300 transition hover:bg-white/5 hover:text-amber-200">
+                    <button type="button" onClick={() => setSidebarPanel((value) => value === "trails" ? null : "trails")} className="flex h-14 w-14 items-center justify-center border-b border-amber-200/10 text-amber-300 transition hover:bg-white/5 hover:text-amber-200">
                       <IconFootprints className="h-6 w-6" />
                     </button>
-                    <button type="button" onMouseEnter={() => setSidebarPanel("hints")} onMouseLeave={() => setSidebarPanel(null)} onClick={() => setSidebarPanel((value) => value === "hints" ? null : "hints")} className="flex h-14 w-14 items-center justify-center text-amber-300 transition hover:bg-white/5 hover:text-amber-200">
+                    <button type="button" onClick={() => setSidebarPanel((value) => value === "hints" ? null : "hints")} className="flex h-14 w-14 items-center justify-center text-amber-300 transition hover:bg-white/5 hover:text-amber-200">
                       <IconMap className="h-6 w-6" />
                     </button>
                   </div>
@@ -1911,80 +1913,43 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
               </div>
 
               <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1600px] items-center justify-center md:min-h-[calc(100vh-3rem)]">
-                <div className="w-full overflow-hidden rounded-[34px] border border-amber-200/14 bg-[linear-gradient(180deg,rgba(255,246,220,0.02),rgba(3,3,3,0.98))] shadow-[0_28px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,220,140,0.06)]">
+                <div className="w-full overflow-hidden rounded-[34px] border border-amber-200/12 bg-[linear-gradient(180deg,rgba(255,246,220,0.015),rgba(3,3,3,0.99))] shadow-[0_28px_100px_rgba(0,0,0,0.82),inset_0_1px_0_rgba(255,220,140,0.05)]">
                   <div className="relative min-h-[calc(100vh-2rem)] overflow-hidden p-6 md:min-h-[calc(100vh-3rem)] md:p-8">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_12%,rgba(123,72,28,0.12),transparent_20%),linear-gradient(180deg,#090706_0%,#020202_100%)]" />
-                    <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)", backgroundSize: "100% 28px, 28px 100%" }} />
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_55%,transparent_18%,rgba(0,0,0,0.64)_100%)]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(123,72,28,0.07),transparent_18%),linear-gradient(180deg,#060505_0%,#010101_100%)]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_58%,transparent_12%,rgba(0,0,0,0.74)_70%,rgba(0,0,0,0.95)_100%)]" />
 
-                    <div className="relative z-10 max-w-xl">
-                      <p className="text-xs uppercase tracking-[0.35em] text-amber-300/55">{sceneTitle}</p>
-                      <h2 className="mt-3 font-serif text-3xl text-amber-50">{explorationSceneId === "stage-entry" ? "前方只有一扇戏楼大门" : "黑里慢慢找门"}</h2>
-                      <p className="mt-3 text-sm leading-7 text-stone-300">{scenePrompt}</p>
-                      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-200/12 bg-black/35 px-3 py-1.5 text-xs text-amber-100/70">
-                        <span className="h-2 w-2 rounded-full bg-amber-300/75 shadow-[0_0_8px_rgba(252,211,77,0.55)]" />
-                        {statusLine}{hint ? ` · ${hint}` : ""}
-                      </div>
-                    </div>
-
-                    <div className="absolute inset-x-0 bottom-0 top-[16%]">
-                      {explorationSceneId === "stage-entry" ? (
+                    <div className="absolute inset-x-0 bottom-0 top-[10%]">
+                      {currentSceneId === "stage-entry" ? (
                         <>
-                          <div className="absolute left-1/2 top-[5%] h-[20%] w-[20%] -translate-x-1/2 rounded-full bg-amber-100/8 blur-3xl" />
-                          <div className="absolute left-1/2 bottom-[10%] h-[38%] w-[76%] -translate-x-1/2 [clip-path:polygon(18%_0,82%_0,100%_100%,0_100%)] bg-[linear-gradient(180deg,rgba(70,40,18,0.12),rgba(6,4,4,0.94))]" />
-                          <div className="absolute left-1/2 top-[17%] h-[44%] w-[34%] -translate-x-1/2 rounded-[42px] border border-amber-100/10 bg-[linear-gradient(180deg,rgba(24,15,12,0.7),rgba(5,4,4,0.96))] shadow-[0_20px_60px_rgba(0,0,0,0.45)]" />
+                          <div className="absolute left-1/2 top-[8%] h-[22%] w-[22%] -translate-x-1/2 rounded-full bg-amber-100/5 blur-3xl" />
+                          <div className="absolute left-1/2 bottom-[11%] h-[40%] w-[78%] -translate-x-1/2 [clip-path:polygon(18%_0,82%_0,100%_100%,0_100%)] bg-[linear-gradient(180deg,rgba(54,31,16,0.10),rgba(5,4,4,0.96))]" />
                           <button
                             type="button"
-                            onClick={() => {
-                              if (stageDepth >= 2) {
-                                moveForward();
-                              } else {
-                                setHint("再靠近一点，就能摸到门环。");
-                                setStageDepth((value) => Math.min(2, value + 1));
-                              }
-                            }}
+                            onClick={moveForward}
                             className="absolute left-1/2 top-[50%] -translate-x-1/2 -translate-y-1/2 transition-all duration-500"
-                            style={{ transform: `translate(-50%, -50%) scale(${0.92 + stageDepth * 0.14})` }}
+                            style={{ transform: `translate(-50%, -50%) scale(${0.86 + stageDepth * 0.12})`, opacity: 0.55 + stageDepth * 0.12 }}
                           >
-                            <div className="relative h-[380px] w-[280px] overflow-hidden rounded-[40px] border border-amber-100/22 bg-[linear-gradient(180deg,rgba(51,29,20,0.94),rgba(10,8,8,0.98))] shadow-[0_0_80px_rgba(0,0,0,0.65)]">
-                              <div className="absolute inset-x-[7%] top-[5%] h-[9%] rounded-t-[18px] bg-[linear-gradient(180deg,rgba(143,95,58,0.58),rgba(88,55,32,0.78))]" />
-                              <div className="absolute inset-x-[10%] top-[14%] h-[68%] rounded-[30px] border border-amber-100/12 bg-[linear-gradient(180deg,rgba(82,49,31,0.92),rgba(15,12,12,0.98))]" />
-                              <div className="absolute inset-x-[16%] top-[20%] h-[54%] rounded-[22px] border border-black/25 bg-[linear-gradient(180deg,rgba(109,66,40,0.78),rgba(32,18,15,0.96))]" />
-                              <div className="absolute left-[30%] top-[24%] bottom-[34%] w-px bg-amber-100/12" />
-                              <div className="absolute right-[30%] top-[24%] bottom-[34%] w-px bg-amber-100/12" />
-                              <div className="absolute left-[56%] top-[47%] h-4 w-4 rounded-full border border-black/25 bg-[radial-gradient(circle_at_40%_40%,rgba(20,13,10,0.15),rgba(6,5,5,0.95))]" />
-                              <div className="absolute inset-x-[12%] bottom-[11%] h-[7%] rounded-b-[12px] bg-[linear-gradient(180deg,rgba(45,28,20,0.78),rgba(12,9,9,0.98))]" />
-                              <div className="absolute inset-x-0 bottom-[10%] text-center">
-                                <p className="text-sm uppercase tracking-[0.35em] text-amber-100/60">戏楼大门</p>
-                                <p className="mt-2 text-xs text-stone-300">{stageDepth >= 2 ? "再向前一步推门进过道" : "按前进靠近大门"}</p>
-                              </div>
+                            <div className="relative h-[520px] w-[360px] overflow-hidden rounded-[48px] border border-amber-100/18 bg-[linear-gradient(180deg,rgba(40,22,16,0.9),rgba(5,4,4,0.98))] shadow-[0_0_110px_rgba(0,0,0,0.72)]">
+                              <div className="absolute inset-x-[9%] top-[6%] h-[10%] rounded-t-[18px] bg-[linear-gradient(180deg,rgba(123,80,48,0.55),rgba(70,43,28,0.78))]" />
+                              <div className="absolute left-[12%] top-[16%] bottom-[10%] w-[9%] rounded-l-[12px] bg-[linear-gradient(180deg,rgba(48,30,20,0.92),rgba(10,8,8,0.98))]" />
+                              <div className="absolute right-[12%] top-[16%] bottom-[10%] w-[9%] rounded-r-[12px] bg-[linear-gradient(180deg,rgba(48,30,20,0.92),rgba(10,8,8,0.98))]" />
+                              <div className="absolute inset-x-[18%] top-[20%] h-[58%] rounded-[24px] border border-amber-100/10 bg-[linear-gradient(180deg,rgba(86,52,33,0.78),rgba(20,14,14,0.98))]" />
+                              <div className="absolute left-[58%] top-[49%] h-4 w-4 rounded-full border border-black/20 bg-[radial-gradient(circle_at_40%_40%,rgba(20,14,10,0.15),rgba(6,5,5,0.96))]" />
                             </div>
                           </button>
                         </>
                       ) : (
                         <>
-                          <div className="absolute inset-x-[8%] top-[0%] h-[16%] rounded-b-[60px] bg-[linear-gradient(180deg,rgba(22,13,10,0.75),rgba(0,0,0,0.04))]" />
-                          <div className="absolute left-[10%] top-[12%] h-[60%] w-[24%] skew-y-[8deg] bg-[linear-gradient(180deg,rgba(14,10,10,0.92),rgba(3,3,3,1))]" />
-                          <div className="absolute right-[10%] top-[12%] h-[60%] w-[24%] -skew-y-[8deg] bg-[linear-gradient(180deg,rgba(14,10,10,0.92),rgba(3,3,3,1))]" />
-                          <div className="absolute left-1/2 top-[16%] h-[54%] w-[18%] -translate-x-1/2 rounded-[28px] bg-[linear-gradient(180deg,rgba(16,12,12,0.9),rgba(2,2,2,1))]" />
-                          <div className="absolute left-[12%] right-[12%] bottom-[9%] h-[38%] [clip-path:polygon(18%_0,82%_0,100%_100%,0_100%)] bg-[linear-gradient(180deg,rgba(50,28,15,0.05),rgba(4,4,4,0.98))]" />
-                          <div className="absolute left-1/2 bottom-[9%] h-[34%] w-px -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,220,170,0.10),transparent)]" />
-                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,transparent_0%,rgba(0,0,0,0.20)_26%,rgba(0,0,0,0.72)_56%,rgba(0,0,0,0.94)_100%)]" />
-                          {visibleDoors.map(renderCorridorDoor)}
-                          <div className="absolute left-1/2 bottom-[14%] -translate-x-1/2 rounded-full border border-white/10 bg-black/35 px-4 py-2 text-xs text-stone-300">
-                            你现在在{laneLabels[lane]}
+                          {renderHallShell()}
+                          {visiblePortals.map(renderPortal)}
+                          <div className="absolute left-1/2 bottom-[12%] -translate-x-1/2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs text-stone-400">
+                            {currentSceneId === "lower-hall" ? "下层戏楼" : "上层戏楼"} · {laneText[lane]}
                           </div>
                         </>
                       )}
                     </div>
 
-                    <div className="absolute bottom-5 left-5 z-20 max-w-md rounded-[22px] border border-white/10 bg-black/45 px-5 py-4 backdrop-blur-sm">
-                      <p className="text-xs uppercase tracking-[0.3em] text-amber-300/60">探索方式</p>
-                      <p className="mt-2 text-sm leading-7 text-stone-300">键盘或右下角按钮都能操作。先前后走，再在黑过道里左右挪位置，走近后才会看清是哪一扇门。</p>
-                    </div>
-
                     <div className="absolute bottom-5 right-5 z-20 rounded-[24px] border border-white/10 bg-black/55 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
-                      <p className="mb-3 text-center text-[11px] uppercase tracking-[0.28em] text-amber-300/55">移动</p>
                       <div className="grid grid-cols-3 gap-2">
                         <div />
                         <button type="button" onClick={moveForward} className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-200/14 bg-white/[0.04] text-amber-100 transition hover:border-amber-200/30 hover:bg-white/[0.08]" aria-label="前进">
@@ -2158,10 +2123,10 @@ function(a,b,c){if(!Vd(b))throw Error(n(200));return Wd(null,a,b,!1,c)};Q.unmoun
         const [sidebarHover, setSidebarHover] = useState(null);
 
         const exitToExplore = () => {
-          const doorPosition = explorationDoorPositions[currentRoomId] || { step: 0, lane: 1 };
+          const doorPosition = explorationDoorPositions[currentRoomId] || { scene: "lower-hall", step: 0, lane: 1 };
           setState((state) => ({
             roomViewMode: "explore",
-            explorationSceneId: "corridor",
+            explorationSceneId: doorPosition.scene,
             explorationCorridorStep: doorPosition.step,
             explorationLane: doorPosition.lane,
             activeDialogue: null,
